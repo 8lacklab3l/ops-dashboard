@@ -1,0 +1,4 @@
+node_modules/
+pentest.db
+*.db-shm
+*.db-wal
