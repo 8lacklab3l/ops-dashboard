@@ -79,6 +79,11 @@ function allRecords(table) {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(__dirname));
 
+// ─── ROUTES ─────────────────────────────────────────────────────────────────────
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'pentest-dashboard.html'));
+});
+
 // ─── API ────────────────────────────────────────────────────────────────────────
 
 app.get('/api/ping', (req, res) => {
