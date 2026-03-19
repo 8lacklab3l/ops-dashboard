@@ -163,6 +163,16 @@ app.put('/api/map-positions', (req, res) => {
 // ─── DB CONSOLE ─────────────────────────────────────────────────────────────
 const SAFE_VERBS = new Set(['SELECT','WITH','EXPLAIN','PRAGMA','VALUES']);
 
+// node:sqlite can return BigInt for large integers; JSON.stringify throws on them
+function safeJson(res, status, obj) {
+  try {
+    const body = JSON.stringify(obj, (_k, v) => typeof v === 'bigint' ? Number(v) : v);
+    res.status(status).type('json').send(body);
+  } catch(e) {
+    res.status(500).type('json').send(JSON.stringify({ error: 'Serialization error: ' + e.message }));
+  }
+}
+
 app.post('/api/db/query', (req, res) => {
   const { sql } = req.body;
   if (!sql || typeof sql !== 'string') return res.status(400).json({ error: 'Missing sql' });
@@ -172,10 +182,10 @@ app.post('/api/db/query', (req, res) => {
     if (SAFE_VERBS.has(verb)) {
       const rows = stmt.all();
       const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
-      res.json({ type: 'select', columns, rows, rowCount: rows.length });
+      safeJson(res, 200, { type: 'select', columns, rows, rowCount: rows.length });
     } else {
       const info = stmt.run();
-      res.json({ type: 'exec', changes: info.changes, lastInsertRowid: String(info.lastInsertRowid) });
+      safeJson(res, 200, { type: 'exec', changes: info.changes, lastInsertRowid: String(info.lastInsertRowid) });
     }
   } catch(e) {
     res.status(400).json({ error: e.message });
