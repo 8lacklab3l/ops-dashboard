@@ -160,6 +160,28 @@ app.put('/api/map-positions', (req, res) => {
   res.json({ ok: true, modified });
 });
 
+// ─── DB CONSOLE ─────────────────────────────────────────────────────────────
+const SAFE_VERBS = new Set(['SELECT','WITH','EXPLAIN','PRAGMA','VALUES']);
+
+app.post('/api/db/query', (req, res) => {
+  const { sql } = req.body;
+  if (!sql || typeof sql !== 'string') return res.status(400).json({ error: 'Missing sql' });
+  const verb = sql.trim().replace(/\/\*[\s\S]*?\*\//g, '').trim().split(/\s+/)[0].toUpperCase();
+  try {
+    const stmt = db.prepare(sql.trim());
+    if (SAFE_VERBS.has(verb)) {
+      const rows = stmt.all();
+      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+      res.json({ type: 'select', columns, rows, rowCount: rows.length });
+    } else {
+      const info = stmt.run();
+      res.json({ type: 'exec', changes: info.changes, lastInsertRowid: String(info.lastInsertRowid) });
+    }
+  } catch(e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 app.post('/api/import', (req, res) => {
   const { meta, hosts=[], networks=[], credentials=[], findings=[], activity=[], mapPositions={} } = req.body;
   const modified = Date.now();
