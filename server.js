@@ -77,6 +77,12 @@ function allRecords(table) {
 
 // ─── MIDDLEWARE ─────────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '50mb' }));
+
+// Vendored frontend libraries — served from node_modules for offline/air-gapped use
+app.use('/vendor/leaflet',           express.static(path.join(__dirname, 'node_modules/leaflet/dist')));
+app.use('/vendor/chartjs',           express.static(path.join(__dirname, 'node_modules/chart.js/dist')));
+app.use('/vendor/chartjs-datefns',   express.static(path.join(__dirname, 'node_modules/chartjs-adapter-date-fns/dist')));
+
 app.use(express.static(__dirname));
 
 // ─── ROUTES ─────────────────────────────────────────────────────────────────────
