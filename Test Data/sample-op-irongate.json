@@ -1,0 +1,545 @@
+{
+  "meta": {
+    "opName": "Op IRONGATE",
+    "targetPrefix": "IG",
+    "scope": "10.10.0.0/16, 172.16.50.0/24 (DMZ)",
+    "notes": "Internal pentest — Irongate Manufacturing Ltd.\nROE: No DoS, no data exfiltration. Report to SOC if critical vuln found.\nContact: J. Marsh (IT Mgr) +44 7700 900142\nTesting window: Mon-Fri 08:00-18:00 BST",
+    "created": 1741218000000,
+    "modified": 1741304400000
+  },
+  "networks": [
+    {
+      "id": "net-001",
+      "cidr": "172.16.50.0/24",
+      "vlan": "50",
+      "gateway": "172.16.50.1",
+      "description": "DMZ — Internet-facing services",
+      "scope": "In Scope",
+      "notes": "Web servers, mail relay, VPN gateway. Firewalled from internal LAN on VLAN 50.",
+      "added": 1741218600000,
+      "_sources": {
+        "cidr": "nmap ping sweep / client network diagram",
+        "gateway": "traceroute from external probe"
+      }
+    },
+    {
+      "id": "net-002",
+      "cidr": "10.10.10.0/24",
+      "vlan": "10",
+      "gateway": "10.10.10.1",
+      "description": "Corporate LAN — General users",
+      "scope": "In Scope",
+      "notes": "Primary workstation subnet. ~120 active hosts. Windows domain IRONGATE.LOCAL.",
+      "added": 1741218660000,
+      "_sources": {
+        "cidr": "client-provided network diagram (irongate_network_v3.pdf)",
+        "vlan": "snmp walk 10.10.10.1 — ifDescr"
+      }
+    },
+    {
+      "id": "net-003",
+      "cidr": "10.10.20.0/24",
+      "vlan": "20",
+      "gateway": "10.10.20.1",
+      "description": "Server LAN — Infrastructure",
+      "scope": "In Scope",
+      "notes": "Domain controllers, file servers, SCCM, backup systems. Restricted access from corp LAN via ACL.",
+      "added": 1741218720000,
+      "_sources": {
+        "cidr": "bloodhound — computer objects subnet field"
+      }
+    },
+    {
+      "id": "net-004",
+      "cidr": "10.10.30.0/24",
+      "vlan": "30",
+      "gateway": "10.10.30.1",
+      "description": "OT / SCADA Network",
+      "scope": "Out of Scope",
+      "notes": "Industrial control systems. Excluded from scope per client request. Do not touch.",
+      "added": 1741218780000,
+      "_sources": {
+        "cidr": "client-provided scope document (scope_irongate_2024.docx)"
+      }
+    },
+    {
+      "id": "net-005",
+      "cidr": "10.10.99.0/24",
+      "vlan": "99",
+      "gateway": "10.10.99.1",
+      "description": "Management / IPMI Network",
+      "scope": "Partial",
+      "notes": "BMC/IPMI interfaces for servers. Only iDRAC/iLO enumeration approved — no exploitation.",
+      "added": 1741218840000,
+      "_sources": {}
+    }
+  ],
+  "hosts": [
+    {
+      "id": "host-001",
+      "tgt_id": "IG-001",
+      "wan_ip": "203.0.113.10",
+      "lan_ip": "172.16.50.10",
+      "hostname": "web01.irongate.com",
+      "os": "Ubuntu 22.04 LTS",
+      "ports": "22,80,443",
+      "services": "SSH, HTTP (nginx), HTTPS (nginx)",
+      "status": "Up",
+      "notes": "Primary public web server. Running nginx/1.18.0. PHP 8.1 backend. Interesting /admin path returns 403.",
+      "added": 1741219200000,
+      "_sources": {
+        "wan_ip": "shodan.io search: org:\"Irongate Manufacturing\"",
+        "lan_ip": "nmap -sV 172.16.50.0/24 — /scans/dmz-full.xml",
+        "hostname": "ssl cert CN field / DNS lookup",
+        "os": "nmap -O / whatweb output",
+        "ports": "nmap -p- 172.16.50.10 — /scans/dmz-ports.txt",
+        "services": "nmap -sV -sC output"
+      }
+    },
+    {
+      "id": "host-002",
+      "tgt_id": "IG-002",
+      "wan_ip": "203.0.113.11",
+      "lan_ip": "172.16.50.11",
+      "hostname": "mail.irongate.com",
+      "os": "Ubuntu 20.04 LTS",
+      "ports": "25,465,587,993,143,80,443",
+      "services": "SMTP, SMTPS, Submission, IMAPS, IMAP, HTTP, HTTPS",
+      "status": "Up",
+      "notes": "Postfix + Dovecot mail server. SMTP banner leaks hostname and version. STARTTLS enforced.",
+      "added": 1741219260000,
+      "_sources": {
+        "wan_ip": "MX record DNS lookup: dig MX irongate.com",
+        "hostname": "SMTP banner: 220 mail.irongate.com ESMTP Postfix",
+        "os": "SMTP banner / ssh version string"
+      }
+    },
+    {
+      "id": "host-003",
+      "tgt_id": "IG-003",
+      "wan_ip": "203.0.113.15",
+      "lan_ip": "172.16.50.15",
+      "hostname": "vpn.irongate.com",
+      "os": "Unknown (appliance)",
+      "ports": "443,1194,4443",
+      "services": "HTTPS (Pulse Secure VPN), OpenVPN, management UI",
+      "status": "Up",
+      "notes": "Pulse Secure SSL VPN appliance. Version fingerprinted as 9.1R11. Check for CVE-2021-22893.",
+      "added": 1741219320000,
+      "_sources": {
+        "wan_ip": "DNS A record: vpn.irongate.com",
+        "hostname": "SSL cert SAN field",
+        "os": "HTTP response header: X-Pulse-Version: 9.1R11.0",
+        "ports": "nmap -sV 203.0.113.15 — /scans/external-vpn.txt"
+      }
+    },
+    {
+      "id": "host-004",
+      "tgt_id": "IG-004",
+      "wan_ip": "",
+      "lan_ip": "10.10.20.5",
+      "hostname": "DC01.IRONGATE.LOCAL",
+      "os": "Windows Server 2019 Standard (Build 17763)",
+      "ports": "53,88,135,139,389,445,464,593,636,3268,3269,3389",
+      "services": "DNS, Kerberos, RPC, NetBIOS, LDAP, SMB, Kpasswd, RPC-HTTP, LDAPS, GC, GC-SSL, RDP",
+      "status": "Up",
+      "notes": "Primary Domain Controller. IRONGATE.LOCAL. SMB signing enforced. LDAP null bind denied. RDP accessible from corp LAN.",
+      "added": 1741219380000,
+      "_sources": {
+        "lan_ip": "bloodhound — DC01.IRONGATE.LOCAL / nmap server LAN sweep",
+        "hostname": "bloodhound domain node / net view /domain",
+        "os": "crackmapexec smb 10.10.20.0/24 — /scans/cme-servers.txt",
+        "ports": "nmap -p- 10.10.20.5 — /scans/server-full-ports.xml",
+        "services": "nmap -sV -sC 10.10.20.5"
+      }
+    },
+    {
+      "id": "host-005",
+      "tgt_id": "IG-005",
+      "wan_ip": "",
+      "lan_ip": "10.10.20.6",
+      "hostname": "DC02.IRONGATE.LOCAL",
+      "os": "Windows Server 2016 Standard (Build 14393)",
+      "ports": "53,88,135,389,445,464,636,3268,3389",
+      "services": "DNS, Kerberos, RPC, LDAP, SMB, Kpasswd, LDAPS, GC, RDP",
+      "status": "Up",
+      "notes": "Secondary DC / FSMO backup. Older OS — check for PrintNightmare and ZeroLogon. SMB signing enforced.",
+      "added": 1741219440000,
+      "_sources": {
+        "lan_ip": "bloodhound — computer objects",
+        "hostname": "bloodhound / AD LDAP enum (ldapdomaindump)",
+        "os": "crackmapexec smb — /scans/cme-servers.txt"
+      }
+    },
+    {
+      "id": "host-006",
+      "tgt_id": "IG-006",
+      "wan_ip": "",
+      "lan_ip": "10.10.20.10",
+      "hostname": "FS01.IRONGATE.LOCAL",
+      "os": "Windows Server 2019 Standard",
+      "ports": "135,139,445,3389",
+      "services": "RPC, NetBIOS, SMB, RDP",
+      "status": "Compromised",
+      "notes": "File server. Shares: \\\\FS01\\Finance (readable by all domain users — misconfigured). Found credentials in \\Finance\\IT\\scripts\\deploy.ps1. Local admin obtained via credential reuse.",
+      "added": 1741219500000,
+      "_sources": {
+        "lan_ip": "nmap server sweep — /scans/server-lan.xml",
+        "hostname": "crackmapexec smb / net use output",
+        "os": "crackmapexec smb 10.10.20.10",
+        "ports": "nmap -p- 10.10.20.10"
+      }
+    },
+    {
+      "id": "host-007",
+      "tgt_id": "IG-007",
+      "wan_ip": "",
+      "lan_ip": "10.10.20.15",
+      "hostname": "SCCM01.IRONGATE.LOCAL",
+      "os": "Windows Server 2022 Standard",
+      "ports": "80,135,443,445,8530,8531",
+      "services": "HTTP, RPC, HTTPS, SMB, WSUS HTTP, WSUS HTTPS",
+      "status": "Up",
+      "notes": "SCCM / WSUS server. Potential for SCCM relay attacks. NAA creds may be stored — investigate.",
+      "added": 1741219560000,
+      "_sources": {
+        "lan_ip": "nmap server sweep",
+        "hostname": "bloodhound computer objects / DNS reverse lookup",
+        "os": "crackmapexec smb"
+      }
+    },
+    {
+      "id": "host-008",
+      "tgt_id": "IG-008",
+      "wan_ip": "",
+      "lan_ip": "10.10.20.50",
+      "hostname": "BACKUP01.IRONGATE.LOCAL",
+      "os": "Windows Server 2019",
+      "ports": "135,445,1433,9000",
+      "services": "RPC, SMB, MSSQL, Veeam Backup service",
+      "status": "Up",
+      "notes": "Veeam Backup & Replication server. SQL Express on 1433. High value target — may contain backup credentials for all systems.",
+      "added": 1741219620000,
+      "_sources": {
+        "lan_ip": "nmap server sweep — /scans/server-lan.xml",
+        "hostname": "DNS reverse lookup / crackmapexec smb"
+      }
+    },
+    {
+      "id": "host-009",
+      "tgt_id": "IG-009",
+      "wan_ip": "",
+      "lan_ip": "10.10.10.101",
+      "hostname": "WS-ACCOUNTS-01.IRONGATE.LOCAL",
+      "os": "Windows 10 Pro 22H2",
+      "ports": "135,139,445",
+      "services": "RPC, NetBIOS, SMB",
+      "status": "Compromised",
+      "notes": "Accounts dept workstation. Initial access via phishing sim (not in scope but found open). LSASS dumped — obtained domain user creds. Used as pivot into server LAN.",
+      "added": 1741219680000,
+      "_sources": {
+        "lan_ip": "nmap corp LAN sweep — /scans/corp-lan.xml",
+        "hostname": "crackmapexec smb / AD computer object",
+        "os": "crackmapexec smb output"
+      }
+    },
+    {
+      "id": "host-010",
+      "tgt_id": "IG-010",
+      "wan_ip": "",
+      "lan_ip": "10.10.10.102",
+      "hostname": "WS-IT-HELPDESK.IRONGATE.LOCAL",
+      "os": "Windows 11 Pro 23H2",
+      "ports": "135,445,3389",
+      "services": "RPC, SMB, RDP",
+      "status": "Up",
+      "notes": "IT Helpdesk machine. RDP exposed within corp LAN. Likely to have elevated privileges — investigate cached credentials.",
+      "added": 1741219740000,
+      "_sources": {
+        "lan_ip": "nmap corp LAN sweep",
+        "hostname": "AD LDAP — computer objects with department=IT"
+      }
+    },
+    {
+      "id": "host-011",
+      "tgt_id": "IG-011",
+      "wan_ip": "",
+      "lan_ip": "10.10.10.200",
+      "hostname": "",
+      "os": "Unknown",
+      "ports": "80,8080",
+      "services": "HTTP (Apache), HTTP (Tomcat)",
+      "status": "Up",
+      "notes": "Unidentified internal web app on port 8080. Tomcat manager UI accessible at /manager/html — default creds attempted, failed. Further investigation needed.",
+      "added": 1741219800000,
+      "_sources": {
+        "lan_ip": "nmap corp LAN sweep — /scans/corp-lan.xml",
+        "ports": "nmap -p- 10.10.10.200",
+        "services": "nmap -sV / HTTP banner grab"
+      }
+    },
+    {
+      "id": "host-012",
+      "tgt_id": "IG-012",
+      "wan_ip": "",
+      "lan_ip": "10.10.10.1",
+      "hostname": "core-sw-01",
+      "os": "Cisco IOS XE",
+      "ports": "22,23,80,161",
+      "services": "SSH, Telnet (!), HTTP (management), SNMP",
+      "status": "Up",
+      "notes": "Core switch — Telnet ENABLED. SNMP community string 'public' responds. High risk finding.",
+      "added": 1741219860000,
+      "_sources": {
+        "lan_ip": "default gateway — ip route on pivot host",
+        "hostname": "snmp sysName OID: .1.3.6.1.2.1.1.5",
+        "os": "snmp sysDescr OID / telnet banner",
+        "ports": "nmap -sV 10.10.10.1"
+      }
+    },
+    {
+      "id": "host-013",
+      "tgt_id": "IG-013",
+      "wan_ip": "",
+      "lan_ip": "172.16.50.20",
+      "hostname": "",
+      "os": "Unknown",
+      "ports": "22,8443",
+      "services": "SSH, HTTPS",
+      "status": "Unknown",
+      "notes": "Unexpected host in DMZ — not on asset register. Needs investigation. Possible rogue device or forgotten test system.",
+      "added": 1741304000000,
+      "_sources": {
+        "lan_ip": "nmap DMZ sweep 2026-03-06 — /scans/dmz-rescan.xml"
+      }
+    }
+  ],
+  "credentials": [
+    {
+      "id": "cred-001",
+      "username": "svc_deploy",
+      "secret": "W!nter2023Deploy#",
+      "type": "Plaintext",
+      "domain": "IRONGATE",
+      "host": "10.10.20.10",
+      "service": "SMB / Domain Auth",
+      "notes": "Found in \\\\FS01\\Finance\\IT\\scripts\\deploy.ps1 (line 47). Service account — check what systems it can access.",
+      "added": 1741260000000,
+      "_sources": {
+        "username": "\\\\FS01\\Finance\\IT\\scripts\\deploy.ps1 line 47",
+        "secret": "\\\\FS01\\Finance\\IT\\scripts\\deploy.ps1 line 47 — hardcoded PSCredential",
+        "host": "deploy script target — confirmed with crackmapexec"
+      }
+    },
+    {
+      "id": "cred-002",
+      "username": "jmarsh",
+      "secret": "aad3b435b51404eeaad3b435b51404ee:8846f7eaee8fb117ad06bdd830b7586c",
+      "type": "NTLM",
+      "domain": "IRONGATE",
+      "host": "10.10.10.101",
+      "service": "LSASS",
+      "notes": "IT Manager account. Dumped from LSASS on WS-ACCOUNTS-01 via procdump. Pass-the-hash works against SMB on FS01 and DC02.",
+      "added": 1741261000000,
+      "_sources": {
+        "username": "mimikatz sekurlsa::logonpasswords — lsass.dmp",
+        "secret": "mimikatz output — /loot/lsass/ws-accounts-01.txt",
+        "host": "WS-ACCOUNTS-01 (10.10.10.101) — source machine of LSASS dump"
+      }
+    },
+    {
+      "id": "cred-003",
+      "username": "administrator",
+      "secret": "Irongate2019!",
+      "type": "Plaintext",
+      "domain": "IRONGATE.LOCAL",
+      "host": "10.10.20.10",
+      "service": "SMB (local admin)",
+      "notes": "Local admin on FS01 — credential reuse from svc_deploy password pattern. Confirmed with crackmapexec. Same password works on BACKUP01.",
+      "added": 1741262000000,
+      "_sources": {
+        "secret": "password spray against local admin — derived from svc_deploy pattern",
+        "host": "crackmapexec smb 10.10.20.0/24 --local-auth output"
+      }
+    },
+    {
+      "id": "cred-004",
+      "username": "svc_veeam",
+      "secret": "aad3b435b51404eeaad3b435b51404ee:e3d46b14f8ab1b6e3a3e4ce914d22b3a",
+      "type": "NTLM",
+      "domain": "IRONGATE",
+      "host": "10.10.20.50",
+      "service": "Veeam / SQL",
+      "notes": "Veeam service account. NTLM hash from secretsdump on BACKUP01. Not yet cracked — send to hashcat.",
+      "added": 1741263000000,
+      "_sources": {
+        "username": "impacket secretsdump IRONGATE/administrator@10.10.20.50",
+        "secret": "secretsdump output — /loot/backup01-sam.txt",
+        "host": "BACKUP01 (10.10.20.50) — source of secretsdump"
+      }
+    },
+    {
+      "id": "cred-005",
+      "username": "admin",
+      "secret": "public",
+      "type": "Plaintext",
+      "domain": "",
+      "host": "10.10.10.1",
+      "service": "SNMP v2c",
+      "notes": "Default SNMP community string 'public' active on core switch. Read-write community 'private' also responded.",
+      "added": 1741264000000,
+      "_sources": {
+        "secret": "onesixtyone 10.10.10.1 /usr/share/seclists/Discovery/SNMP/snmp.txt",
+        "host": "core switch — default gateway 10.10.10.1"
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "find-001",
+      "title": "Cleartext Credentials in Network Share",
+      "severity": "Critical",
+      "cve": "",
+      "host": "10.10.20.10",
+      "description": "Domain-accessible SMB share \\\\FS01\\Finance contains PowerShell deployment scripts with hardcoded plaintext credentials for the svc_deploy service account.",
+      "evidence": "Share accessible by all authenticated users (Everyone:Read).\nPath: \\\\FS01\\Finance\\IT\\scripts\\deploy.ps1\nLine 47: $cred = New-Object System.Management.Automation.PSCredential('IRONGATE\\svc_deploy', (ConvertTo-SecureString 'W!nter2023Deploy#' -AsPlainText -Force))",
+      "status": "Exploited",
+      "added": 1741260500000,
+      "_sources": {
+        "title": "manual review of \\\\FS01\\Finance share",
+        "host": "FS01.IRONGATE.LOCAL (10.10.20.10)",
+        "evidence": "cat \\\\FS01\\Finance\\IT\\scripts\\deploy.ps1 — output saved to /loot/deploy_ps1.txt"
+      }
+    },
+    {
+      "id": "find-002",
+      "title": "LSASS Credential Dumping — No LSA Protection",
+      "severity": "High",
+      "cve": "",
+      "host": "10.10.10.101",
+      "description": "LSA protection (RunAsPPL) is not enabled. LSASS process memory can be dumped by a local administrator, exposing cached domain credentials in NTLM and plaintext form.",
+      "evidence": "procdump64.exe -accepteula -ma lsass.exe lsass.dmp\nSecrets extracted with mimikatz sekurlsa::minidump / logonpasswords\nRecovered: jmarsh (IRONGATE\\IT Manager) NTLM hash",
+      "status": "Exploited",
+      "added": 1741261500000,
+      "_sources": {
+        "host": "WS-ACCOUNTS-01 (10.10.10.101)",
+        "evidence": "/loot/lsass/ws-accounts-01.txt — mimikatz output"
+      }
+    },
+    {
+      "id": "find-003",
+      "title": "Telnet Enabled on Core Network Switch",
+      "severity": "Critical",
+      "cve": "",
+      "host": "10.10.10.1",
+      "description": "Telnet (TCP/23) is enabled on the core switch. Telnet transmits authentication credentials and all traffic in cleartext, exposing network management credentials to any on-path attacker.",
+      "evidence": "nmap -sV -p 23 10.10.10.1\nPORT   STATE SERVICE VERSION\n23/tcp open  telnet  Cisco telnetd\n\ntelnet 10.10.10.1 — successfully connected, banner: Irongate-Core-SW-01",
+      "status": "Confirmed",
+      "added": 1741264500000,
+      "_sources": {
+        "host": "core-sw-01 (10.10.10.1)",
+        "evidence": "nmap output — /scans/corp-lan.xml + manual telnet test"
+      }
+    },
+    {
+      "id": "find-004",
+      "title": "SNMP Default Community Strings (Public/Private)",
+      "severity": "High",
+      "cve": "CVE-1999-0517",
+      "host": "10.10.10.1",
+      "description": "The core switch responds to SNMP v2c queries using default community strings 'public' (read) and 'private' (read-write). This exposes the full network topology and allows configuration changes.",
+      "evidence": "onesixtyone -c /usr/share/seclists/Discovery/SNMP/snmp.txt 10.10.10.1\n10.10.10.1 [public] Cisco IOS Software...\n10.10.10.1 [private] ...\n\nsnmpwalk -v2c -c public 10.10.10.1 .1 → full MIB walk, ARP/routing tables",
+      "status": "Confirmed",
+      "added": 1741264800000,
+      "_sources": {
+        "evidence": "onesixtyone + snmpwalk output — /scans/snmp-core-sw.txt"
+      }
+    },
+    {
+      "id": "find-005",
+      "title": "Local Administrator Password Reuse Across Servers",
+      "severity": "High",
+      "cve": "",
+      "host": "10.10.20.0/24",
+      "description": "The local Administrator account uses the same password across multiple servers (FS01, BACKUP01). This allows lateral movement across the server LAN once any single host is compromised. LAPS is not deployed.",
+      "evidence": "crackmapexec smb 10.10.20.0/24 -u administrator -p 'Irongate2019!' --local-auth\n10.10.20.10  445  FS01      [+] IRONGATE\\administrator:Irongate2019! (Pwn3d!)\n10.10.20.50  445  BACKUP01  [+] IRONGATE\\administrator:Irongate2019! (Pwn3d!)",
+      "status": "Exploited",
+      "added": 1741262500000,
+      "_sources": {
+        "evidence": "crackmapexec output — /scans/cme-local-admin-spray.txt"
+      }
+    },
+    {
+      "id": "find-006",
+      "title": "Pulse Secure VPN — Potential CVE-2021-22893",
+      "severity": "Critical",
+      "cve": "CVE-2021-22893",
+      "host": "vpn.irongate.com",
+      "description": "The Pulse Secure SSL VPN appliance appears to be running version 9.1R11 which is vulnerable to CVE-2021-22893, an unauthenticated remote code execution vulnerability via a buffer overflow in the web interface. Not exploited per ROE.",
+      "evidence": "Version fingerprint from HTTP response headers:\nX-Pulse-Version: 9.1R11.0\n\nRef: https://kb.pulsesecure.net/articles/Pulse_Security_Advisories/SA44784/",
+      "status": "Open",
+      "added": 1741219320000,
+      "_sources": {
+        "host": "vpn.irongate.com (203.0.113.15)",
+        "evidence": "curl -I https://vpn.irongate.com — response headers"
+      }
+    },
+    {
+      "id": "find-007",
+      "title": "Unauthenticated Tomcat Manager Interface",
+      "severity": "Medium",
+      "cve": "CVE-2019-0232",
+      "host": "10.10.10.200",
+      "description": "Apache Tomcat Manager application is accessible at /manager/html on port 8080 without IP restriction. Successful authentication would allow WAR file deployment and remote code execution.",
+      "evidence": "curl -I http://10.10.10.200:8080/manager/html → HTTP/1.1 401 Unauthorized (reachable)\nDefault credential attempts failed. Brute force not attempted per ROE.",
+      "status": "Open",
+      "added": 1741219800000,
+      "_sources": {
+        "evidence": "nikto -h 10.10.10.200:8080 + manual curl — /scans/nikto-10.10.10.200.txt"
+      }
+    },
+    {
+      "id": "find-008",
+      "title": "Unregistered Host in DMZ",
+      "severity": "Medium",
+      "cve": "",
+      "host": "172.16.50.20",
+      "description": "An unidentified host exists in the DMZ subnet that does not appear on the client's asset register. SSH and HTTPS services are running. Possible rogue device, forgotten test system, or unauthorized access.",
+      "evidence": "nmap -sV 172.16.50.20\nPORT     STATE SERVICE VERSION\n22/tcp   open  ssh     OpenSSH 7.4 (protocol 2.0)\n8443/tcp open  ssl     unknown\n\nNot present in asset inventory provided by client.",
+      "status": "Open",
+      "added": 1741304000000,
+      "_sources": {
+        "host": "172.16.50.20",
+        "evidence": "nmap DMZ rescan 2026-03-06 — /scans/dmz-rescan.xml"
+      }
+    },
+    {
+      "id": "find-009",
+      "title": "SMB Null Session / Anonymous Enumeration Denied",
+      "severity": "Info",
+      "cve": "",
+      "host": "10.10.20.5",
+      "description": "Domain controllers correctly deny anonymous/null session SMB enumeration. RestrictAnonymous is set appropriately.",
+      "evidence": "crackmapexec smb 10.10.20.5 -u '' -p ''\n[-] IRONGATE\\: STATUS_ACCESS_DENIED\n\nNet use \\\\10.10.20.5\\IPC$ '' /user:''\nSystem error 5 — Access is denied.",
+      "status": "Mitigated",
+      "added": 1741220000000,
+      "_sources": {
+        "evidence": "crackmapexec null session test — /scans/cme-null-sessions.txt"
+      }
+    }
+  ],
+  "activity": [
+    { "ts": 1741304000000, "type": "hosts",     "action": "Added",   "label": "172.16.50.20" },
+    { "ts": 1741264800000, "type": "findings",  "action": "Added",   "label": "SNMP Default Community Strings (Public/Private)" },
+    { "ts": 1741264500000, "type": "findings",  "action": "Added",   "label": "Telnet Enabled on Core Network Switch" },
+    { "ts": 1741264000000, "type": "credentials","action": "Added",  "label": "admin" },
+    { "ts": 1741263000000, "type": "credentials","action": "Added",  "label": "svc_veeam" },
+    { "ts": 1741262500000, "type": "findings",  "action": "Added",   "label": "Local Administrator Password Reuse Across Servers" },
+    { "ts": 1741262000000, "type": "credentials","action": "Added",  "label": "administrator" },
+    { "ts": 1741261500000, "type": "findings",  "action": "Added",   "label": "LSASS Credential Dumping — No LSA Protection" },
+    { "ts": 1741261000000, "type": "credentials","action": "Added",  "label": "jmarsh" },
+    { "ts": 1741260500000, "type": "findings",  "action": "Added",   "label": "Cleartext Credentials in Network Share" },
+    { "ts": 1741260000000, "type": "credentials","action": "Added",  "label": "svc_deploy" },
+    { "ts": 1741219860000, "type": "hosts",     "action": "Added",   "label": "10.10.10.1" }
+  ]
+}
